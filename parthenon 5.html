@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Das Parthenon - Detaillierte 3D-Rekonstruktion</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1c1917; }
+        canvas { display: block; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #0c0a09; }
+        ::-webkit-scrollbar-thumb { background: #44403c; border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@19.0.0",
+            "react/jsx-runtime": "https://esm.sh/react@19.0.0/jsx-runtime",
+            "react/jsx-dev-runtime": "https://esm.sh/react@19.0.0/jsx-runtime",
+            "react-dom": "https://esm.sh/react-dom@19.0.0",
+            "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+            "three": "https://esm.sh/three@0.170.0",
+            "@react-three/fiber": "https://esm.sh/@react-three/fiber@9.0.0?external=react,three",
+            "@react-three/drei": "https://esm.sh/@react-three/drei@9.114.0?external=react,react-dom,three,@react-three/fiber",
+            "lucide-react": "https://esm.sh/lucide-react@0.446.0?external=react",
+            "framer-motion": "https://esm.sh/framer-motion@11.11.1?external=react,react-dom"
+        }
+    }
+    </script>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useMemo } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import * as THREE from 'three';
+        import { Canvas } from '@react-three/fiber';
+        import { OrbitControls, Sky, Environment, ContactShadows, PerspectiveCamera } from '@react-three/drei';
+        import { Layers, Info, Eye, EyeOff, Maximize2, CircleHelp } from 'lucide-react';
+        import { motion, AnimatePresence } from 'framer-motion';
+
+        // --- Materialien ---
+        const marbleMaterial = new THREE.MeshStandardMaterial({ color: '#fdfbf7', roughness: 0.25, metalness: 0.05 });
+        const darkMarbleMaterial = new THREE.MeshStandardMaterial({ color: '#e6e2d6', roughness: 0.35, metalness: 0.05 });
+        const roofMaterial = new THREE.MeshStandardMaterial({ color: '#c89f70', roughness: 0.8, metalness: 0.1, side: THREE.DoubleSide });
+        const goldMaterial = new THREE.MeshStandardMaterial({ color: '#ffaa00', roughness: 0.15, metalness: 1.0 });
+
+        // --- 3D Architektur-Komponenten ---
+
+        const Base = () => (
+            <group position={[0, 0, 0]}>
+                <mesh position={[0, 0.25, 0]} material={marbleMaterial} castShadow receiveShadow>
+                    <boxGeometry args={[34, 0.5, 72]} />
+                </mesh>
+                <mesh position={[0, 0.75, 0]} material={marbleMaterial} castShadow receiveShadow>
+                    <boxGeometry args={[33, 0.5, 71]} />
+                </mesh>
+                <mesh position={[0, 1.25, 0]} material={marbleMaterial} castShadow receiveShadow>
+                    <boxGeometry args={[32, 0.5, 70]} />
+                </mesh>
+            </group>
+        );
+
+        const Column = ({ position }) => (
+            <group position={position}>
+                <mesh position={[0, 5, 0]} material={marbleMaterial} castShadow receiveShadow>
+                    <cylinderGeometry args={[0.8, 0.9, 10, 20]} />
+                </mesh>
+                <mesh position={[0, 10.25, 0]} material={marbleMaterial} castShadow receiveShadow>
+                    <boxGeometry args={[2.2, 0.5, 2.2]} />
+                </mesh>
+                <mesh position={[0, 10, 0]} material={marbleMaterial} castShadow receiveShadow>
+                    <cylinderGeometry args={[1.1, 0.8, 0.5, 20]} />
+                </mesh>
+            </group>
+        );
+
+        const TwoStoryColumn = ({ position }) => (
+            <group position={position}>
+                <mesh position={[0, 2.5, 0]} material={marbleMaterial} castShadow receiveShadow>
+                    <cylinderGeometry args={[0.6, 0.7, 5, 20]} />
+                </mesh>
+                <mesh position={[0, 5.1, 0]} material={marbleMaterial} castShadow receiveShadow>
+                    <boxGeometry args={[1.5, 0.2, 1.5]} />
+                </mesh>
+                <mesh position={[0, 7.6, 0]} material={marbleMaterial} castShadow receiveShadow>
+                    <cylinderGeometry args={[0.4, 0.5, 3.8, 20]} />
+                </mesh>
+                <mesh position={[0, 9.6, 0]} material={marbleMaterial} castShadow receiveShadow>
+                    <boxGeometry args={[1.2, 0.2, 1.2]} />
+                </mesh>
+            </group>
+        );
+
+        const OuterColumns = () => {
+            const columns = [];
+            const width = 30, length = 68;
+            const startX = -width / 2, startZ = -length / 2;
+            for (let i = 0; i < 8; i++) {
+                const x = startX + i * (width / 7);
+                columns.push(<Column key={`f-${i}`} position={[x, 1.5, startZ]} />);
+                columns.push(<Column key={`b-${i}`} position={[x, 1.5, -startZ]} />);
+            }
+            for (let i = 1; i < 16; i++) {
+                const z = startZ + i * (length / 16);
+                columns.push(<Column key={`l-${i}`} position={[startX, 1.5, z]} />);
+                columns.push(<Column key={`r-${i}`} position={[-startX, 1.5, z]} />);
+            }
+            return <group>{columns}</group>;
+        };
+
+        const InnerColumns = () => {
+            const columns = [];
+            const width = 30;
+            const startX = -width / 2;
+            const colSpacingX = width / 7;
+
+            // Pronaos & Opisthodomos (6 Säulen jeweils)
+            for (let i = 1; i <= 6; i++) {
+                const x = startX + i * colSpacingX;
+                columns.push(<Column key={`pro-${i}`} position={[x, 1.5, -29.75]} />);
+                columns.push(<Column key={`opi-${i}`} position={[x, 1.5, 29.75]} />);
+            }
+            // Cella U-Form
+            for (let i = 0; i < 10; i++) {
+                const z = -18 + i * 2.44;
+                columns.push(<TwoStoryColumn key={`c-l-${i}`} position={[-6.5, 1.5, z]} />);
+                columns.push(<TwoStoryColumn key={`c-r-${i}`} position={[6.5, 1.5, z]} />);
+            }
+            for (let i = 1; i <= 3; i++) {
+                const x = -6.5 + i * 3.25;
+                columns.push(<TwoStoryColumn key={`c-b-${i}`} position={[x, 1.5, 4]} />);
+            }
+            // Ionische Säulen der Schatzkammer
+            columns.push(<Column key="ion-1" position={[-4, 1.5, 11]} />);
+            columns.push(<Column key="ion-2" position={[4, 1.5, 11]} />);
+            columns.push(<Column key="ion-3" position={[-4, 1.5, 17]} />);
+            columns.push(<Column key="ion-4" position={[4, 1.5, 17]} />);
+
+            return (
+                <group>
+                    {columns}
+                    <mesh position={[-6.5, 6.9, -7]} material={marbleMaterial}><boxGeometry args={[1.5, 0.6, 23.5]} /></mesh>
+                    <mesh position={[6.5, 6.9, -7]} material={marbleMaterial}><boxGeometry args={[1.5, 0.6, 23.5]} /></mesh>
+                    <mesh position={[0, 6.9, 4]} material={marbleMaterial}><boxGeometry args={[14.5, 0.6, 1.5]} /></mesh>
+                </group>
+            );
+        };
+
+        const Walls = ({ visible }) => {
+            if (!visible) return null;
+            return (
+                <group position={[0, 1.5, 0]}>
+                    <mesh position={[-10.5, 5, 0]} material={darkMarbleMaterial} castShadow><boxGeometry args={[1, 10, 52]} /></mesh>
+                    <mesh position={[10.5, 5, 0]} material={darkMarbleMaterial} castShadow><boxGeometry args={[1, 10, 52]} /></mesh>
+                    {/* Anten */}
+                    <mesh position={[-10.5, 5, -26]} material={darkMarbleMaterial}><boxGeometry args={[1.5, 10, 1.5]} /></mesh>
+                    <mesh position={[10.5, 5, -26]} material={darkMarbleMaterial}><boxGeometry args={[1.5, 10, 1.5]} /></mesh>
+                    <mesh position={[-10.5, 5, 26]} material={darkMarbleMaterial}><boxGeometry args={[1.5, 10, 1.5]} /></mesh>
+                    <mesh position={[10.5, 5, 26]} material={darkMarbleMaterial}><boxGeometry args={[1.5, 10, 1.5]} /></mesh>
+                    {/* Trennwand & Türwände */}
+                    <mesh position={[0, 5, 8]} material={darkMarbleMaterial}><boxGeometry args={[20, 10, 1]} /></mesh>
+                    <mesh position={[-7, 5, -20]} material={darkMarbleMaterial}><boxGeometry args={[6, 10, 1]} /></mesh>
+                    <mesh position={[7, 5, -20]} material={darkMarbleMaterial}><boxGeometry args={[6, 10, 1]} /></mesh>
+                    <mesh position={[0, 8.5, -20]} material={darkMarbleMaterial}><boxGeometry args={[8, 3, 1]} /></mesh>
+                    <mesh position={[-7, 5, 20]} material={darkMarbleMaterial}><boxGeometry args={[6, 10, 1]} /></mesh>
+                    <mesh position={[7, 5, 20]} material={darkMarbleMaterial}><boxGeometry args={[6, 10, 1]} /></mesh>
+                    <mesh position={[0, 8.5, 20]} material={darkMarbleMaterial}><boxGeometry args={[8, 3, 1]} /></mesh>
+                </group>
+            );
+        };
+
+        const Roof = ({ visible }) => {
+            const roofShape = useMemo(() => {
+                const s = new THREE.Shape();
+                s.moveTo(-17, 0); s.lineTo(17, 0); s.lineTo(0, 6); s.lineTo(-17, 0);
+                return s;
+            }, []);
+            const pedimentShape = useMemo(() => {
+                const s = new THREE.Shape();
+                s.moveTo(-16, 0); s.lineTo(16, 0); s.lineTo(0, 5.5); s.lineTo(-16, 0);
+                return s;
+            }, []);
+
+            if (!visible) return null;
+            return (
+                <group position={[0, 12, 0]}>
+                    <mesh position={[0, 0.75, 0]} material={marbleMaterial} castShadow><boxGeometry args={[33, 1.5, 71]} /></mesh>
+                    <mesh position={[0, -0.1, 0]} material={darkMarbleMaterial}><boxGeometry args={[31, 0.2, 69]} /></mesh>
+                    <mesh position={[0, 1.5, -36]} material={roofMaterial} castShadow><extrudeGeometry args={[roofShape, { depth: 72, bevelEnabled: false }]} /></mesh>
+                    <mesh position={[0, 1.5, -35.5]} material={darkMarbleMaterial}><extrudeGeometry args={[pedimentShape, { depth: 1, bevelEnabled: false }]} /></mesh>
+                    <mesh position={[0, 1.5, 34.5]} material={darkMarbleMaterial}><extrudeGeometry args={[pedimentShape, { depth: 1, bevelEnabled: false }]} /></mesh>
+                </group>
+            );
+        };
+
+        const Statue = ({ visible }) => {
+            if (!visible) return null;
+            return (
+                <group position={[0, 1.5, -8]}>
+                    <mesh position={[0, 0.5, 0]} material={marbleMaterial}><boxGeometry args={[6, 1, 4]} /></mesh>
+                    {/* Körper */}
+                    <mesh position={[0, 5, 0]} material={goldMaterial} castShadow><cylinderGeometry args={[1.5, 2, 8, 32]} /></mesh>
+                    {/* Kopf */}
+                    <mesh position={[0, 9.5, 0]} material={goldMaterial}><sphereGeometry args={[1.2, 32, 32]} /></mesh>
+                    
+                    {/* Linke Seite: Schild & Speer */}
+                    <mesh position={[-2.5, 4, 1]} rotation={[Math.PI/2, 0, 0]} material={goldMaterial}><cylinderGeometry args={[2, 2, 0.2, 32]} /></mesh>
+                    <mesh position={[-2.5, 6, 1]} material={goldMaterial}><cylinderGeometry args={[0.1, 0.1, 12, 16]} /></mesh>
+                    
+                    {/* Rechte Seite: Rechter Arm, der Nike hält */}
+                    <mesh position={[1.5, 4.5, 0.5]} rotation={[0, 0, Math.PI/2]} material={goldMaterial} castShadow>
+                        <cylinderGeometry args={[0.3, 0.3, 3, 16]} />
+                    </mesh>
+                    
+                    {/* Nike (Sieg) */}
+                    <mesh position={[3, 5, 0.5]} material={goldMaterial} castShadow>
+                        <cylinderGeometry args={[0.3, 0.4, 1.5, 16]} />
+                    </mesh>
+                    <mesh position={[3, 6, 0.5]} material={goldMaterial}>
+                        <sphereGeometry args={[0.25, 32, 32]} />
+                    </mesh>
+                </group>
+            );
+        };
+
+        // --- Haupt-App ---
+
+        function App() {
+            const [showRoof, setShowRoof] = useState(true);
+            const [showWalls, setShowWalls] = useState(true);
+            const [showStatue, setShowStatue] = useState(true);
+            const [infoPanel, setInfoPanel] = useState(false);
+
+            return (
+                <div className="flex h-screen w-full bg-stone-900 text-stone-100 font-sans overflow-hidden">
+                    <aside className="w-80 bg-stone-950 border-r border-stone-800 flex flex-col z-10 shadow-2xl overflow-y-auto">
+                        <header className="p-6 border-b border-stone-800">
+                            <h1 className="text-2xl font-serif font-medium tracking-tight text-stone-100 mb-2 flex items-center gap-3">
+                                <Maximize2 className="text-amber-500" size={24} />
+                                Das Parthenon
+                            </h1>
+                            <p className="text-sm text-stone-400 leading-relaxed text-xs">
+                                Vollständige Athena Parthenos mit Nike, Schild und detaillierter Architektur.
+                            </p>
+                        </header>
+
+                        <div className="p-6 flex flex-col gap-6">
+                            <section>
+                                <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-500 mb-4 flex items-center gap-2">
+                                    <Layers size={14} className="text-amber-600/60" />
+                                    Anzeige-Optionen
+                                </h2>
+                                <div className="space-y-2">
+                                    <button onClick={() => setShowRoof(!showRoof)} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all duration-300 ${showRoof ? 'bg-stone-800/50 border-stone-700 text-stone-100 shadow-lg' : 'bg-stone-900 border-stone-800 text-stone-600'}`}>
+                                        <span className="text-sm font-semibold tracking-wide">Dach & Gebälk</span>
+                                        {showRoof ? <Eye size={18} /> : <EyeOff size={18} />}
+                                    </button>
+                                    <button onClick={() => setShowWalls(!showWalls)} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all duration-300 ${showWalls ? 'bg-stone-800/50 border-stone-700 text-stone-100 shadow-lg' : 'bg-stone-900 border-stone-800 text-stone-600'}`}>
+                                        <span className="text-sm font-semibold tracking-wide">Cella-Wände</span>
+                                        {showWalls ? <Eye size={18} /> : <EyeOff size={18} />}
+                                    </button>
+                                    <button onClick={() => setShowStatue(!showStatue)} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all duration-300 ${showStatue ? 'bg-stone-800/50 border-stone-700 text-stone-100 shadow-lg' : 'bg-stone-900 border-stone-800 text-stone-600'}`}>
+                                        <span className="text-sm font-semibold tracking-wide">Athena-Statue</span>
+                                        {showStatue ? <Eye size={18} /> : <EyeOff size={18} />}
+                                    </button>
+                                </div>
+                            </section>
+
+                            <section className="bg-stone-900/40 rounded-2xl p-5 border border-stone-800/50">
+                                <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-500 mb-4 flex items-center gap-2">
+                                    <Info size={14} className="text-amber-600/60" />
+                                    Statue & Struktur
+                                </h2>
+                                <ul className="text-xs text-stone-400 space-y-2 list-disc pl-4">
+                                    <li><strong className="text-stone-300">Athena:</strong> 12m hoch, Gold & Elfenbein</li>
+                                    <li><strong className="text-stone-300">Nike:</strong> In ihrer rechten Hand</li>
+                                    <li><strong className="text-stone-300">Cella:</strong> Hauptraum für Athena</li>
+                                    <li><strong className="text-stone-300">Opisthodomos:</strong> Hintere Schatzkammer</li>
+                                </ul>
+                            </section>
+                            
+                            <button onClick={() => setInfoPanel(true)} className="mt-auto flex items-center justify-center gap-2 py-4 rounded-xl bg-amber-600/10 text-amber-500 border border-amber-600/20 hover:bg-amber-600/20 transition-colors">
+                                <CircleHelp size={18} />
+                                <span className="text-sm font-bold">Wissenswertes</span>
+                            </button>
+                        </div>
+                    </aside>
+
+                    <main className="flex-1 relative bg-[#0c0a09]">
+                        <Canvas shadows>
+                            <PerspectiveCamera makeDefault position={[50, 40, 70]} fov={40} />
+                            <Sky sunPosition={[100, 20, 100]} turbidity={0.1} rayleigh={0.5} />
+                            <Environment preset="city" />
+                            <ambientLight intensity={0.4} />
+                            <directionalLight castShadow position={[50, 60, 40]} intensity={1.8} shadow-mapSize={[2048, 2048]} />
+                            
+                            <group>
+                                <Base />
+                                <OuterColumns />
+                                <InnerColumns />
+                                <Walls visible={showWalls} />
+                                <Roof visible={showRoof} />
+                                <Statue visible={showStatue} />
+                            </group>
+                            
+                            <ContactShadows position={[0, -0.1, 0]} opacity={0.6} scale={120} blur={2.5} far={10} />
+                            <OrbitControls makeDefault minDistance={10} maxDistance={150} maxPolarAngle={Math.PI / 2 - 0.05} target={[0, 5, 0]} />
+                        </Canvas>
+
+                        <AnimatePresence>
+                            {infoPanel && (
+                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-50 bg-stone-950/80 backdrop-blur-md flex items-center justify-center p-12" onClick={() => setInfoPanel(false)}>
+                                    <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="max-w-2xl bg-stone-900 border border-stone-800 rounded-3xl p-10 shadow-2xl" onClick={e => e.stopPropagation()}>
+                                        <h3 className="text-3xl font-serif mb-6 text-amber-500">Athena Parthenos</h3>
+                                        <div className="space-y-4 text-stone-400 leading-relaxed text-sm">
+                                            <p>Die Statue der <strong>Athena Parthenos</strong> war das Zentrum des Tempels. Sie hielt in ihrer rechten Hand die geflügelte Siegesgöttin <strong>Nike</strong>. Zu ihrer Linken befand sich ein prächtiger Schild und ein Speer.</p>
+                                            <p>Die Cella war so konzipiert, dass das Morgenlicht durch die geöffnete Osttür direkt auf die vergoldete Statue fiel und sie im Inneren des Tempels erleuchten ließ.</p>
+                                        </div>
+                                        <button onClick={() => setInfoPanel(false)} className="mt-8 px-8 py-3 bg-stone-800 hover:bg-stone-700 text-stone-100 rounded-xl font-bold transition-colors w-full">Schließen</button>
+                                    </motion.div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </main>
+                </div>
+            );
+        }
+
+        createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
